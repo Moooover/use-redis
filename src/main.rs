@@ -1,20 +1,11 @@
 use tokio::net::{TcpListener, TcpStream};
 use mini_redis::{Connection, Frame};
 
+use tokio::task::yield_now;
+use std::rc::Rc;
+
 #[tokio::main]
 async fn main() {
-  // test
-  let handle = tokio::spawn(async {
-    println!("asdfasdf");
-    let mut i = 0;
-    while i < 1000000000 {
-      i += 1;
-    };
-    "Hello World!"
-  });
-  let out = handle.await.unwrap();
-  println!("JoinHandle out = {}", out);
-
   let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
   loop {
     let (socket, _) = listener.accept().await.unwrap();
