@@ -4,9 +4,15 @@ use mini_redis::{Connection, Frame};
 use tokio::task::yield_now;
 use std::rc::Rc;
 
+use std::sync::{Arc, Mutex};
+type Db = Arc<Mutex<HashMap<String, Bytes>>>;
+
 #[tokio::main]
 async fn main() {
   let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
+
+  let db = Arc::new(Mutex::new(HashMap::new()));
+
   loop {
     let (socket, _) = listener.accept().await.unwrap();
     tokio::spawn(async move {
