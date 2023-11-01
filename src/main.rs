@@ -16,11 +16,31 @@ async fn main() {
 }
 
 async fn process(socket: TcpStream) {
-  let mut connection = Connection::new(socket);
-  if let Some(frame) = connection.read_frame().await.unwrap() {
-    println!("GOT: {:?}", frame);
 
-    let response = Frame::Error("unimplemented".to_string());
+  use mini_redis::Command::{self, Get, Set};
+  use std::collections::HashMap;
+
+  let mut db = HashMap::new();
+
+  // handles parsing frames from the socket
+  let mut connection = Connection::new(socket);
+
+  // Use `read_frame` to receive a command from the connection
+  while let Some(frame) = connection.read_frame().await.unwrap() {
+    let response = match Command::from_frame(frame).unwrap() {
+      Set(cmd) => {
+        db.insert(cmd.key().to_string(), cmd.value().to_vec());
+        Frame::Simple("OK".to_string())
+      }
+      Get(cmd) => {
+        if let Some(value) = db.get(cmd.key()) {
+          Frame::Bulk(value.clone().into())
+        } else {
+          Frame::Null
+        }
+      }
+      cmd => panic!("unimplemented {:?}", cmd),
+    };
     connection.write_frame(&response).await.unwrap();
-  }
+  }  
 }
