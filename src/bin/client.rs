@@ -1,18 +1,22 @@
 use mini_redis::client;
 use bytes::Bytes;
+use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 
 #[derive(Debug)]
 enum Command {
   Get {
     key: String,
+    resp: Responder<Option<Bytes>>
   },
   Set {
     key: String,
-    val: Bytes
+    val: Bytes,
+    resp: Responder<()>
   }
 }
 
-use tokio::sync::mpsc;
+type Responder<T> = oneshot::Sender<mini_redis::Result<T>>;
 
 #[tokio::main]
 async fn main() {
@@ -25,11 +29,13 @@ async fn main() {
       use Command::*;
 
       match cmd {
-        Get { key } => {
-          client.get(&key).await;
+        Get { key , resp } => {
+          let res = client.get(&key).await;
+          let _ = resp.send(res);
         }
-        Set { key, val } => {
-          client.set(&key, val).await;
+        Set { key, val , resp } => {
+          let res = client.set(&key, val).await;
+          let _ = resp.send(res);
         }
       }
     }
@@ -37,18 +43,35 @@ async fn main() {
 
   let tx2 = tx.clone();
 
-  tokio::spawn(async move {
+  let t1_handle = tokio::spawn(async move {
+    let (resp_tx, resp_rx) = oneshot::channel();
     let cmd = Command::Get {
-      key: "foo".to_string()
+      key: "foo".to_string(),
+      resp: resp_tx
     };
     tx.send(cmd).await.unwrap();
+
+    let res = resp_rx.await;
+    println!("GOT = {:?}", res);
   });
 
-  tokio::spawn(async move {
+  let t2_handle = tokio::spawn(async move {
+    let (resp_tx, resp_rx) = oneshot::channel();
     let cmd = Command::Set {
       key: "foo".to_string(),
-      val: "bar".into()
+      val: "bar".into(),
+      resp: resp_tx
     };
     tx2.send(cmd).await.unwrap();
+
+    let res = resp_rx.await;
+    println!("GOT = {:?}", res);
   });
+
+  t2_handle.await.unwrap();
+  let mut i = 0;
+  while i < 10000000 { i += 1; }
+  t1_handle.await.unwrap();
+  manager.await.unwrap();
+
 }
